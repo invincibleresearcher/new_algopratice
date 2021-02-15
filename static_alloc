@@ -1,0 +1,39 @@
+#include <stdio.h>
+#include <malloc.h>
+
+struct ln {
+	int val;
+	struct ln *next;
+};
+
+
+#define DEFINE_STATIC_ALLOC(n, s) \
+struct n##_mem { \
+	struct n pool[s]; \
+	void *ptr[s]; \
+	int wptr; \
+}; \
+\
+struct n##_mem n##_mem_impl; \
+\
+static inline void n##_mem_init(void) \
+{ \
+	int i; \
+	for (i = 0; i < s; i++) n##_mem_impl.ptr[i] = &n##_mem_impl.pool[i]; \
+	n##_mem_impl.wptr = s; \
+} \
+\
+static inline void *n##_alloc(void) \
+{ \
+	void *ptr = n##_mem_impl.ptr[n##_mem_impl.wptr-1]; \
+	n##_mem_impl.wptr--; \
+	return ptr; \
+} \
+\
+static inline void n##_free(void *ptr) \
+{ \
+	n##_mem_impl.ptr[n##_mem_impl.wptr] = ptr; \
+	n##_mem_impl.wptr++; \
+}
+
+DEFINE_STATIC_ALLOC(ln, 1000) 
