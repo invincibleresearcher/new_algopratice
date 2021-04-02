@@ -16,11 +16,17 @@ static inline long timer_check(void)
 	return tdiff;
 }
 
+// overlap definition : overlap the boundary of two boxes or inclusion of
+// another box, etc
+// 0 : only check the existence of overlapped box for the given bounding box
+// 1 : return total # of overlapped boxes for the given bounding box
+int option = 0;
+
 #define MAX_C 10000
 #define MAX_R 10000
 
-#define GRID_R 2000
-#define GRID_C 2000
+#define GRID_R 1000
+#define GRID_C 1000
 
 #define MAX_RECT 10000
 
@@ -55,28 +61,19 @@ static inline void n##_free(void *ptr) \
 #define MAX_HEAD_SIZE	((L_MAX_R_SIZE*L_MAX_C_SIZE)+1)
 #define MAX_LN_SIZE	(MAX_HEAD_SIZE * MAX_RECT)
 
-enum overlap_op {
-	OVERLAP_DEFAULT,
-	OVERLAP_BOUNDARY_ONLY,
-};
-
-enum overlap_op option = OVERLAP_DEFAULT;
-
 #define INDEX(x,y,w) (y*w+x)
 
 struct rect {
 	int x, y, w, h;
-	char is_valid;
+	char is_visited;
 	void *lnptr[MAX_HEAD_SIZE];
 };
-
 DEFINE_STATIC_ALLOC(rect, MAX_RECT)
 
 struct rect_ln {
 	struct rect *r;
 	struct rect_ln *prev, *next;
 };
-
 DEFINE_STATIC_ALLOC(rect_ln, MAX_LN_SIZE)
 
 struct rect_ln head[MAX_HEAD_SIZE];
@@ -109,7 +106,7 @@ static inline struct rect *new_rect(int x, int y, int w, int h)
 {
 	int i;
 	struct rect *r = (struct rect *) rect_alloc();
-	r->is_valid = 1;
+	r->is_visited = 0;
 	r->x = x; r->y = y; r->w = w; r->h = h;
 	for (i = 0; i < MAX_HEAD_SIZE; i++) r->lnptr[i] = NULL;
 	return r;
@@ -126,22 +123,13 @@ static inline int add_rect(int x, int y, int w, int h)
 	r = new_rect(x, y, w, h);
 	add_list(0, r);
 
-	box_sx = x / GRID_C; box_ex = (x + w) / GRID_C;
-	box_sy = y / GRID_R; box_ey = (y + h) / GRID_R;
+	box_sx = x / GRID_C; box_ex = (int)(((float)(x + w)) / GRID_C);
+	box_sy = y / GRID_R; box_ey = (int)(((float)(y + h)) / GRID_R);
 
-	switch (option) {
-	case OVERLAP_DEFAULT:
-		for (i = box_sy; i <= box_ey; i++) {
-			for (j = box_sx; j <= box_ex; j++) {
-				add_list(INDEX(j, i, L_MAX_C_SIZE)+1, r);
-			}
+	for (i = box_sy; i <= box_ey; i++) {
+		for (j = box_sx; j <= box_ex; j++) {
+			add_list(INDEX(j, i, L_MAX_C_SIZE)+1, r);
 		}
-		break;
-	case OVERLAP_BOUNDARY_ONLY:
-		// FIXME: TDB.
-		break;
-	default:
-		break;
 	}
 	return 0;
 }
@@ -161,85 +149,74 @@ static inline void remove_rect(struct rect *r)
 			__remove_list((struct rect_ln *)r->lnptr[i]);
 		}
 	}
-	r->is_valid = 0;
 	rect_free(r);
-}
-
-static inline int __is_overlap_op1(int x1, int y1, int w1, int h1,
-				   int x2, int y2, int w2, int h2)
-{
-	if (x1+w1 < x2 || x2+w2 < x1) return 0;
-	if (y1+h1 < y2 || y2+y2 < y1) return 0;
-	return 1;
-}
-
-static inline int is_inside(int x1, int y1, int w1, int h1,
-			    int x2, int y2, int w2, int h2)
-{
-	if (x1 <= x2 && x2+w2 <= x1+w1 &&
-	    y1 <= y2 && y2+h2 <= y1+h1) {
-		return 1;
-	}
-	return 0;
-}
-
-static inline int __is_overlap_op2(int x1, int y1, int w1, int h1,
-				   int x2, int y2, int w2, int h2)
-{
-	if (x1+w1 <= x2 || x2+w2 <= x1) return 0;
-	if (y1+h1 <= y2 || y2+y2 <= y1) return 0;
-	if (is_inside(x1, y1, w1, h1, x2, y2, w2, h2)) return 0;
-	if (is_inside(x2, y2, w2, h2, x1, y1, w1, h1)) return 0;
-	return 1;
 }
 
 static inline int is_overlap(int x1, int y1, int w1, int h1,
 			     int x2, int y2, int w2, int h2)
 {
-	if (option == OVERLAP_DEFAULT) {
-		return __is_overlap_op1(x1, y1, w1, h1, x2, y2, w2, h2);
-	}
-	else {
-		return __is_overlap_op2(x1, y1, w1, h1, x2, y2, w2, h2);
-	}
+	if (x1+w1 < x2 || x2+w2 < x1) return 0;
+	if (y1+h1 < y2 || y2+h2 < y1) return 0;
+	return 1;
 }
 
-static inline int __query_rect(struct rect_ln *head, int op, int x, int y, int w, int h)
+static struct rect *visited[MAX_RECT];
+static int visited_cnt = 0;
+
+static inline int __query_rect(struct rect_ln *head, int x, int y, int w, int h)
 {
-	int cnt = 0;
+	int i, j, cnt = 0, tmp_cnt;
 	struct rect *r;
 	struct rect_ln *it = head;
 
 	while (it->next) {
 		r = it->next->r;
-		cnt += is_overlap(r->x, r->y, r->w, r->h, x, y, w, h);
-		if (op == 0 && cnt) return 1;
+		if (!r->is_visited) {
+			tmp_cnt = is_overlap(r->x, r->y, r->w, r->h, x, y, w, h);
+			cnt += tmp_cnt;
+			if (option == 0 && tmp_cnt) {
+				return 1;
+			}
+			if (tmp_cnt) {
+				r->is_visited = 1;
+				visited[visited_cnt++] = r;
+			}
+		}
 		it = it->next;
 	}
 	return cnt;
 }
 
-static inline int query_rect(int op, int x, int y, int w, int h)
+static void visited_clear(void)
+{
+	int i;
+	for (i = 0; i < visited_cnt; i++) {
+		visited[i]->is_visited = 0;
+	}
+	visited_cnt = 0;
+}
+
+static inline int query_rect(int x, int y, int w, int h)
 {
 	int cnt = 0;
 	int idx, i, j, box_sx, box_sy, box_ex, box_ey;
 
-	box_sx = x / GRID_C; box_ex = (x + w) / GRID_C;
-	box_sy = y / GRID_R; box_ey = (y + h) / GRID_R;
+	box_sx = x / GRID_C; box_ex = (int)(((float)(x + w)) / GRID_C);
+	box_sy = y / GRID_R; box_ey = (int)(((float)(y + h)) / GRID_R);
 	for (i = box_sy; i <= box_ey; i++) {
 		for (j = box_sx; j <= box_ex; j++) {
 			idx = INDEX(j, i, L_MAX_C_SIZE) + 1;
-			cnt += __query_rect(&head[idx], op, x, y, w, h);
-			if (cnt) return 1;
+			cnt += __query_rect(&head[idx], x, y, w, h);
+			if (option == 0 && cnt) return 1;
 		}
 	}
 	return cnt;
 }
 
-static inline int query_rect_ref(int op, int x, int y, int w, int h)
+static inline int query_rect_ref(int x, int y, int w, int h)
 {
 	int cnt = 0;
-	cnt += __query_rect(&head[0], op, x, y, w, h);
+	cnt += __query_rect(&head[0], x, y, w, h);
 	return cnt;
 }
 
@@ -306,7 +283,8 @@ static void test1(void)
 	timer_check();
 	cnt = 0;
 	while (cnt < TEST1_QUERY_SIZE) {
-		ans[cnt] = query_rect_ref(0, qr[cnt].x, qr[cnt].y, qr[cnt].w, qr[cnt].h);
+		ans[cnt] = query_rect_ref(qr[cnt].x, qr[cnt].y, qr[cnt].w, qr[cnt].h);
+		visited_clear();
 		cnt++;
 	}
 	printf("cal time: %ld ms\n", timer_check());
@@ -314,7 +292,8 @@ static void test1(void)
 	timer_check();
 	cnt = 0;
 	while (cnt < TEST1_QUERY_SIZE) {
-		ret[cnt] = query_rect(0, qr[cnt].x, qr[cnt].y, qr[cnt].w, qr[cnt].h);
+		ret[cnt] = query_rect(qr[cnt].x, qr[cnt].y, qr[cnt].w, qr[cnt].h);
+		visited_clear();
 		cnt++;
 	}
 	printf("cal time: %ld ms\n", timer_check());
@@ -325,6 +304,7 @@ static void test1(void)
 			printf("[%d test] ans:%d != ret:%d [%d,%d,%d,%d]\n",
 			       cnt, ans[cnt], ret[cnt],
 			       qr[cnt].x, qr[cnt].y, qr[cnt].w, qr[cnt].h);
+
 			exit(-1);
 		}
 		cnt++;
@@ -335,6 +315,10 @@ static void test1(void)
 
 int main(void)
 {
-	test1();
+	int i;
+	for (i = 0; i < 10; i++) {
+		printf("\n\n## %d-th test1 test\n", i+1);
+		test1();
+	}
 	return 0;
-}
+} 
