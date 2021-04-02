@@ -20,7 +20,7 @@ static inline long timer_check(void)
 // another box, etc
 // 0 : only check the existence of overlapped box for the given bounding box
 // 1 : return total # of overlapped boxes for the given bounding box
-int option = 0;
+int option = 1;
 
 #define MAX_C 10000
 #define MAX_R 10000
@@ -177,10 +177,9 @@ static inline int __query_rect(struct rect_ln *head, int x, int y, int w, int h)
 			if (option == 0 && tmp_cnt) {
 				return 1;
 			}
-			if (tmp_cnt) {
-				r->is_visited = 1;
-				visited[visited_cnt++] = r;
-			}
+
+			r->is_visited = 1;
+			visited[visited_cnt++] = r;
 		}
 		it = it->next;
 	}
@@ -321,4 +320,4 @@ int main(void)
 		test1();
 	}
 	return 0;
-} 
+}
