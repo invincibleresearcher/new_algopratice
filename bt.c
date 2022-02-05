@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+// @c1
 struct tn {
     int v;
     struct tn *l, *r;
