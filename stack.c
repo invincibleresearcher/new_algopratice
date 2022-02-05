@@ -1,6 +1,6 @@
 #include <stdio.h>
 
-#define MAX_LEN 100
+#define MAX_LEN 1000 //change stack size
 
 typedef struct {
     int buf[MAX_LEN];
