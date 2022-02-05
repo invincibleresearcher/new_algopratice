@@ -3,7 +3,7 @@
 #define MAX_LEN 1000 //change stack size
 
 // c1 add
-// c2 add
+// c2 add c2 added more
 
 typedef struct {
     int buf[MAX_LEN];
