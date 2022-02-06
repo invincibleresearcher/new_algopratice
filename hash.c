@@ -5,6 +5,8 @@
 #define MAX_STRLEN 200
 #define HASH_T_SIZE 22
 
+// c1
+
 typedef struct {
     char key[MAX_STRLEN];
     int val;
