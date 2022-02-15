@@ -2,12 +2,6 @@
 
 #define MAX_LEN 100
 
-// c1
-// c2
-// c3
-// c4
-// c5
-
 typedef struct {
     int buf[MAX_LEN];
     int wptr, rptr;
