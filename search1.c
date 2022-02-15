@@ -4,6 +4,8 @@
 #define M 399
 #define N 934
 
+// c1
+
 int map[N][M];
 
 void map_clear(void)
