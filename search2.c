@@ -3,6 +3,7 @@
 #define MAXN 100
 
 // c1
+// c2
 
 int e[MAXN][MAXN];
 int mp[MAXN][MAXN];
