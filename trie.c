@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+// c1
+
 #define CHILD_LEN 26
 
 typedef struct trie {
