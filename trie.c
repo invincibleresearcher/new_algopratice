@@ -5,6 +5,8 @@
 
 #define CHILD_LEN 26
 
+// c2
+
 typedef struct trie {
     int is_terminal;
     int val;
